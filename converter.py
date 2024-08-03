@@ -77,15 +77,12 @@ def parse_files(source: Path):
     return file_groups
 
 
-def stitch_group(group: FileGroup):
+def stitch_group(group: FileGroup, output_dir: Path):
     front = str(group.get_by_position(Position.FRONT).file)
     internal = str(group.get_by_position(Position.INTERNAL).file)
     rear = str(group.get_by_position(Position.REAR).file)
 
-    if not Path('./out').exists():
-        Path('./out').mkdir()
-
-    output_file = Path(f"./out/output_{group.pk}.mp4")
+    output_file = output_dir / f'stitched_{group.pk}.mp4'
 
     vstacked = ffmpeg.filter([ffmpeg.input(internal), ffmpeg.input(rear)], 'vstack')
     hstacked = ffmpeg.filter([ffmpeg.input(front), vstacked], 'hstack')
@@ -96,11 +93,11 @@ def stitch_group(group: FileGroup):
     return output_file
 
 
-def stitch_all(groups: list[FileGroup], max_workers=5):
+def stitch_all(groups: list[FileGroup], max_workers=5, output_dir: Path = Path('out')):
     futures = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for group in groups:
-            future = executor.submit(stitch_group, group)
+            future = executor.submit(stitch_group, group, output_dir)
             futures.append((group, future))
 
     for group, future in futures:
@@ -139,13 +136,13 @@ def cli():
 
 
 @cli.command()
-@click.option("-p", "--parallelism", default=2, help="Number of parallel ffmpeg processes to run.")
-@click.option("-s", "--src", prompt="Source path", help="Path to the source directory.")
-@click.option("-d", "--dst", prompt="Destination path", help="Path to the destination directory.")
+@click.option('-p', '--parallelism', default=2, help='Number of parallel ffmpeg processes to run.')
+@click.option('-s', '--src', prompt='Source path', help='Path to the source directory.')
+@click.option('-d', '--dst', prompt='Destination path', help='Path to the destination directory.')
 def stitch(parallelism, src, dst):
     src = Path(src)
-    assert src.exists(), f"Source path {src} does not exist."
-    assert src.is_dir(), f"Source path {src} is not a directory."
+    assert src.exists(), f'Source path {src} does not exist.'
+    assert src.is_dir(), f'Source path {src} is not a directory.'
 
     dst = Path(dst)
     if not dst.exists():
@@ -153,22 +150,22 @@ def stitch(parallelism, src, dst):
 
     file_groups = parse_files(src)
     stitched_files = []
-    for group, stitched_file in stitch_all(file_groups, max_workers=parallelism):
+    for group, stitched_file in stitch_all(file_groups, max_workers=parallelism, output_dir=dst):
         print(f'Stitched group {group}: {stitched_file}')
         stitched_files.append(stitched_file)
 
 
 @cli.command()
-@click.option("-s", "--src", prompt="Source path", help="Path to the source directory.")
-@click.option("-d", "--dst", prompt="Destination path", help="Path to the destination directory.")
+@click.option('-s', '--src', prompt='Source path', help='Path to the source directory.')
+@click.option('-d', '--dst', prompt='Destination path', help='Path to the destination directory.')
 def combine(src, dst):
     src = Path(src)
-    assert src.exists(), f"Source path {src} does not exist."
-    assert src.is_dir(), f"Source path {src} is not a directory."
+    assert src.exists(), f'Source path {src} does not exist.'
+    assert src.is_dir(), f'Source path {src} is not a directory.'
 
     files = src.glob('*.mp4')
-    combine_clips(sorted(files), dst)
+    combine_clips(sorted(files), final_output_file=dst)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     cli()
